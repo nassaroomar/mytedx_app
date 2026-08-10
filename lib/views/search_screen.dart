@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../theme/app_theme.dart';
 import '../viewmodels/search_viewmodel.dart';
+import '../viewmodels/video_player_provider.dart';
 import '../widgets/tag_chip.dart';
 import '../widgets/talk_card.dart';
 
@@ -20,10 +21,53 @@ class _SearchScreenState extends State<SearchScreen> {
     'Culture',
     'Design',
     'Business',
+    'Education',
+    'Health',
+    'Media',
+    'Social change',
+    'Marketing',
+    'Communication',
+    'Film',
+    'Women',
+    'Feminism',
+    'Sex',
+    'Women Health',
+    'Menopause',
+    'Ageing',
+    'Evolution',
+    'Biology',
+    'Microbiology',
+    'TED-Ed',
+    'Animation',
+    'Human body',
+    'Science communication',
+    'Personal growth',
+    'TEDx',
+    'Exploration',
+    'Travel',
+    'TED Fellows',
+    'Ocean',
+    'Climate change',
+    'Sustainability',
+    'Food',
+    'Society',
+    'Money',
+    'Farming',
+    'Countdown',
+    'Storytelling',
+    'Psychology',
+    'Work',
+    'Decision-making',
+    'Work-life balance',
+    'Emotions',
+    'Art',
+    'Innovation',
   ];
 
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
+  final ScrollController _scrollController = ScrollController();
+  String? _handledPendingTag;
 
   @override
   void initState() {
@@ -31,13 +75,26 @@ class _SearchScreenState extends State<SearchScreen> {
     final initialQuery = context.read<SearchViewModel>().query;
     _controller = TextEditingController(text: initialQuery);
     _focusNode = FocusNode();
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.maxScrollExtent <= 0) return;
+    if (position.pixels >= position.maxScrollExtent - 480) {
+      context.read<SearchViewModel>().loadMore();
+    }
   }
 
   Future<void> _submitSearch() async {
@@ -47,8 +104,29 @@ class _SearchScreenState extends State<SearchScreen> {
     await viewModel.search();
   }
 
+  Future<void> _consumePendingTagIfNeeded(VideoPlayerProvider video) async {
+    final tag = video.pendingSearchTag;
+    if (tag == null || tag == _handledPendingTag) return;
+
+    _handledPendingTag = tag;
+    video.clearPendingSearchTag();
+
+    _controller.clear();
+    context.read<SearchViewModel>().updateQuery('');
+
+    final searchVm = context.read<SearchViewModel>();
+    await searchVm.selectTag(tag, allowToggleOff: false);
+
+    _handledPendingTag = null;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final video = context.watch<VideoPlayerProvider>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumePendingTagIfNeeded(video);
+    });
+
     return Scaffold(
       body: SafeArea(
         child: Consumer<SearchViewModel>(
@@ -99,24 +177,30 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
                 const SizedBox(height: 14),
                 SizedBox(
-                  height: 40,
-                  child: ListView.separated(
+                  height: 88,
+                  child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _popularTags.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final tag = _popularTags[index];
-                      final selected = viewModel.selectedTag?.toLowerCase() ==
-                          tag.toLowerCase();
-                      return TagChip(
-                        label: tag,
-                        selected: selected,
-                        onTap: () => viewModel.selectTag(tag),
-                      );
-                    },
+                    child: _TwoRowTags(
+                      tags: _popularTags,
+                      selectedTag: viewModel.selectedTag,
+                      onTagTap: viewModel.selectTag,
+                    ),
                   ),
                 ),
+                if (viewModel.selectedTag != null) ...[
+                  const SizedBox(height: 10),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'Showing results for “${viewModel.selectedTag}”',
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Expanded(child: _buildResults(viewModel)),
               ],
@@ -162,14 +246,76 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
+    final itemCount = viewModel.results.length +
+        (viewModel.isLoadingMore || viewModel.hasMore ? 1 : 0);
+
     return ListView.separated(
+      controller: _scrollController,
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      itemCount: viewModel.results.length,
+      itemCount: itemCount,
       separatorBuilder: (_, _) => const SizedBox(height: 14),
       itemBuilder: (context, index) {
+        if (index >= viewModel.results.length) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: AppTheme.tedRed,
+                ),
+              ),
+            ),
+          );
+        }
         return TalkCard(talk: viewModel.results[index]);
       },
+    );
+  }
+}
+
+class _TwoRowTags extends StatelessWidget {
+  const _TwoRowTags({
+    required this.tags,
+    required this.selectedTag,
+    required this.onTagTap,
+  });
+
+  final List<String> tags;
+  final String? selectedTag;
+  final Future<void> Function(String tag) onTagTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final mid = (tags.length / 2).ceil();
+    final row1 = tags.sublist(0, mid);
+    final row2 = tags.sublist(mid);
+
+    Widget row(List<String> items) {
+      return Row(
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            TagChip(
+              label: items[i],
+              selected: selectedTag?.toLowerCase() == items[i].toLowerCase(),
+              onTap: () => onTagTap(items[i]),
+            ),
+          ],
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        row(row1),
+        const SizedBox(height: 8),
+        row(row2),
+      ],
     );
   }
 }

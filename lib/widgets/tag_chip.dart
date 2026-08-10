@@ -9,12 +9,14 @@ class TagChip extends StatelessWidget {
     this.selected = false,
     this.onTap,
     this.outlined = false,
+    this.compact = false,
   });
 
   final String label;
   final bool selected;
   final VoidCallback? onTap;
   final bool outlined;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +25,10 @@ class TagChip extends StatelessWidget {
     final child = AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 10 : 14,
+        vertical: compact ? 5 : 8,
+      ),
       decoration: BoxDecoration(
         color: selected
             ? AppTheme.tedRed
@@ -40,7 +45,7 @@ class TagChip extends StatelessWidget {
           color: selected
               ? Colors.white
               : (outlined ? AppTheme.tedRed : AppTheme.textSecondary),
-          fontSize: 13,
+          fontSize: compact ? 11 : 13,
           fontWeight: FontWeight.w600,
         ),
       ),

@@ -1,4 +1,4 @@
-package com.example.mytedx_app
+package com.unibg.mytedx_app
 
 import io.flutter.embedding.android.FlutterActivity
 

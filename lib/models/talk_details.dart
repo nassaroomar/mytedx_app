@@ -10,6 +10,8 @@ class TalkDetails {
   final DateTime? publishedAt;
   final String imageUrl;
   final String? videoUrl;
+  /// TED internal media id (API key is often misspelled as `interalId`).
+  final String? internalId;
   final List<String> tagsList;
   final List<RelatedTalk> relatedVideos;
 
@@ -23,6 +25,7 @@ class TalkDetails {
     required this.publishedAt,
     required this.imageUrl,
     required this.videoUrl,
+    required this.internalId,
     required this.tagsList,
     required this.relatedVideos,
   });
@@ -38,8 +41,16 @@ class TalkDetails {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
-  /// True when [videoUrl] looks like a direct media stream (mp4/m3u8/etc).
+  /// Direct HLS stream derived from TED's internal media id.
+  String? get tedHlsUrl {
+    final mediaId = internalId?.trim();
+    if (mediaId == null || mediaId.isEmpty) return null;
+    return 'https://hls.ted.com/talks/$mediaId.m3u8';
+  }
+
+  /// True when we can resolve a playable media stream for this talk.
   bool get hasPlayableVideoUrl {
+    if (tedHlsUrl != null) return true;
     final url = videoUrl?.trim() ?? '';
     if (url.isEmpty) return false;
     final uri = Uri.tryParse(url);
@@ -89,6 +100,11 @@ class TalkDetails {
     final rawPresenter = json['presenterDisplayName']?.toString().trim();
     final rawImage = (json['image_url'] ?? json['imageUrl'])?.toString().trim();
     final rawVideo = (json['video_url'] ?? json['videoUrl'])?.toString().trim();
+    final rawInternal = (json['interalId'] ??
+            json['internalId'] ??
+            json['internal_id'])
+        ?.toString()
+        .trim();
 
     return TalkDetails(
       id: json['id']?.toString() ?? '',
@@ -101,6 +117,7 @@ class TalkDetails {
       publishedAt: parsedDate,
       imageUrl: rawImage ?? '',
       videoUrl: (rawVideo == null || rawVideo.isEmpty) ? null : rawVideo,
+      internalId: (rawInternal == null || rawInternal.isEmpty) ? null : rawInternal,
       tagsList: tags,
       relatedVideos: related,
     );
@@ -117,6 +134,7 @@ class TalkDetails {
       'publishedAt': publishedAt?.toIso8601String(),
       'image_url': imageUrl,
       'video_url': videoUrl,
+      'interalId': internalId,
       'tags_list': tagsList,
       'related_videos': relatedVideos.map((item) => item.toJson()).toList(),
     };

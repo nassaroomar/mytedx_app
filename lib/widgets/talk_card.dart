@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/talk.dart';
+import '../services/talk_tags_cache.dart';
 import '../theme/app_theme.dart';
-import '../views/details_screen.dart';
+import '../viewmodels/library_viewmodel.dart';
+import '../viewmodels/video_player_provider.dart';
+import 'expanded_player_view.dart';
+import 'tag_chip.dart';
 import 'talk_cover_image.dart';
 
 class TalkCard extends StatelessWidget {
@@ -10,10 +15,12 @@ class TalkCard extends StatelessWidget {
     super.key,
     required this.talk,
     this.heroEnabled = true,
+    this.maxTags = 6,
   });
 
   final Talk talk;
   final bool heroEnabled;
+  final int maxTags;
 
   @override
   Widget build(BuildContext context) {
@@ -21,17 +28,13 @@ class TalkCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => DetailsScreen(
-                talkId: talk.id,
-                previewTitle: talk.title,
-                previewImageUrl: talk.imageUrl,
-              ),
-            ),
-          );
-        },
+        onTap: () => openTalkInPlayer(
+          context,
+          talkId: talk.id,
+          previewTitle: talk.title,
+          previewImageUrl: talk.imageUrl,
+          previewPresenter: talk.presenterDisplayName,
+        ),
         child: Ink(
           decoration: BoxDecoration(
             color: AppTheme.surface,
@@ -77,8 +80,8 @@ class TalkCard extends StatelessWidget {
                         ),
                       ),
                       Positioned(
-                        top: 10,
                         right: 10,
+                        bottom: 10,
                         child: DurationBadge(
                           duration: talk.formattedDuration,
                         ),
@@ -88,30 +91,42 @@ class TalkCard extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                padding: const EdgeInsets.fromLTRB(14, 12, 8, 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      talk.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        height: 1.25,
-                      ),
+                    _TalkCardTags(talk: talk, maxTags: maxTags),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            talk.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              height: 1.25,
+                            ),
+                          ),
+                        ),
+                        _TalkCardSaveMenu(talk: talk),
+                      ],
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      talk.presenterDisplayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Text(
+                        talk.presenterDisplayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
@@ -120,6 +135,141 @@ class TalkCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TalkCardSaveMenu extends StatelessWidget {
+  const _TalkCardSaveMenu({required this.talk});
+
+  final Talk talk;
+
+  @override
+  Widget build(BuildContext context) {
+    final library = context.watch<LibraryViewModel>();
+    final saved = library.isSaved(talk.id);
+
+    return PopupMenuButton<String>(
+      tooltip: 'More',
+      padding: EdgeInsets.zero,
+      icon: const Icon(Icons.more_vert_rounded, color: Colors.white70),
+      color: AppTheme.surfaceElevated,
+      onSelected: (value) async {
+        if (value == 'save') {
+          await library.addToWatchLater(talk);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Saved to Watch later')),
+            );
+          }
+        } else if (value == 'remove') {
+          await library.removeFromWatchLater(talk.id);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Removed from Watch later')),
+            );
+          }
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: saved ? 'remove' : 'save',
+          child: Text(
+            saved ? 'Remove from Watch later' : 'Save to Watch later',
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TalkCardTags extends StatefulWidget {
+  const _TalkCardTags({required this.talk, required this.maxTags});
+
+  final Talk talk;
+  final int maxTags;
+
+  @override
+  State<_TalkCardTags> createState() => _TalkCardTagsState();
+}
+
+class _TalkCardTagsState extends State<_TalkCardTags> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requestTags());
+  }
+
+  @override
+  void didUpdateWidget(covariant _TalkCardTags oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.talk.id != widget.talk.id) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _requestTags());
+    }
+  }
+
+  void _requestTags() {
+    if (!mounted) return;
+    final talk = widget.talk;
+    if (talk.tagsList.isNotEmpty) {
+      context.read<TalkTagsCache>().seed(talk.id, talk.tagsList);
+      return;
+    }
+    context.read<TalkTagsCache>().ensureLoaded(talk.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cache = context.watch<TalkTagsCache>();
+    final cached = cache.tagsFor(widget.talk.id);
+    final tags = (cached ?? widget.talk.tagsList).take(widget.maxTags).toList();
+    final loading = cached == null &&
+        widget.talk.tagsList.isEmpty &&
+        cache.isLoading(widget.talk.id);
+
+    if (loading) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 10),
+        child: SizedBox(
+          height: 22,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.tedRed,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (tags.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final video = context.read<VideoPlayerProvider>();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: tags
+            .map(
+              (tag) => TagChip(
+                label: tag,
+                outlined: true,
+                compact: true,
+                onTap: () => video.openSearchWithTag(tag),
+              ),
+            )
+            .toList(),
       ),
     );
   }
