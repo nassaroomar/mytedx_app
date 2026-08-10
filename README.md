@@ -18,7 +18,7 @@ Questo progetto è stato realizzato presso l’**Università degli Studi di Berg
 
 ## Panoramica
 
-MyTEDx si collega a un backend REST su **AWS API Gateway** e offre:
+MyTEDx si collega a un **backend REST** e offre:
 
 - feed personalizzato basato su interessi e cronologia
 - ricerca per parola chiave e tag
@@ -86,18 +86,15 @@ MyTEDx si collega a un backend REST su **AWS API Gateway** e offre:
 
 Pattern: **MVVM** con **Provider**.
 
-### API REST
-Base URL (API Gateway):
+### Backend REST
+L’app comunica con un servizio remoto tramite endpoint HTTP (feed, dettagli talk, ricerca).  
+La **base URL** e eventuali credenziali **non** sono documentate qui: vanno configurate in modo privato nel codice / ambiente di sviluppo del corso.
 
-```text
-https://bhux9o0old.execute-api.eu-north-1.amazonaws.com
-```
-
-| Endpoint | Descrizione |
-|----------|-------------|
-| `GET /feed` | Lista talk per la Home / discovery |
-| `GET /details?id=` | Dettagli talk (descrizione, tag, related, URL video) |
-| `GET /search?q=&tag=` | Ricerca per query e/o tag |
+| Risorsa (logica) | Descrizione |
+|------------------|-------------|
+| Feed | Lista talk per la Home / discovery |
+| Details | Dettagli talk (descrizione, tag, related, URL video) |
+| Search | Ricerca per query e/o tag |
 
 ### Persistenza locale (`SharedPreferences`)
 - Cronologia di visione + progresso
@@ -168,6 +165,7 @@ build/app/outputs/flutter-apk/app-release.apk
 
 - Il player web **Chrome / Flutter web** non è supportato allo stesso modo di Android/iOS (dipende da WebView).
 - Non c’è login cloud: tutto il profilo locale resta sul dispositivo.
+- Non pubblicare URL di backend, chiavi o configurazioni private nel repository.
 - Progetto didattico **UniBG** — corso `21069` *Piattaforme cloud e mobile* (a.a. `2025/26`), Prof. Mauro Pelucchi.
 
 ---
