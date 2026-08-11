@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/talk.dart';
 import '../services/local_history_service.dart';
 import '../theme/app_theme.dart';
+import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/library_viewmodel.dart';
 import '../widgets/expanded_player_view.dart';
 import '../widgets/talk_cover_image.dart';
@@ -52,6 +53,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
               ),
             ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: _ProfileAccountHeader(),
+            ),
             TabBar(
               controller: _tabs,
               indicatorColor: AppTheme.tedRed,
@@ -85,6 +90,79 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ProfileAccountHeader extends StatelessWidget {
+  const _ProfileAccountHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthViewModel>();
+    final email = auth.email;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 20,
+            backgroundColor: Color(0xFF2A1212),
+            child: Icon(Icons.person_rounded, color: AppTheme.tedRed),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Signed in',
+                  style: TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  (email == null || email.isEmpty) ? 'MyTEDx account' : email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: auth.isBusy
+                ? null
+                : () async {
+                    await auth.signOut();
+                  },
+            style: TextButton.styleFrom(foregroundColor: AppTheme.tedRed),
+            child: auth.isBusy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.tedRed,
+                    ),
+                  )
+                : const Text('Sign out'),
+          ),
+        ],
       ),
     );
   }

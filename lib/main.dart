@@ -2,17 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import 'services/auth_service.dart';
 import 'services/local_history_service.dart';
 import 'services/recommendation_service.dart';
 import 'services/api_service.dart';
 import 'services/talk_tags_cache.dart';
 import 'theme/app_theme.dart';
+import 'viewmodels/auth_viewmodel.dart';
 import 'viewmodels/details_viewmodel.dart';
 import 'viewmodels/home_viewmodel.dart';
 import 'viewmodels/library_viewmodel.dart';
 import 'viewmodels/search_viewmodel.dart';
 import 'viewmodels/video_player_provider.dart';
-import 'views/main_screen.dart';
+import 'views/auth_gate.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +34,10 @@ class MyTEDxApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final api = ApiService();
+    final authService = AuthService();
+    final api = ApiService(
+      authorizationTokenProvider: authService.getApiAuthorizationToken,
+    );
     final localHistory = LocalHistoryService();
     final recommendations = RecommendationService(
       apiService: api,
@@ -43,6 +48,10 @@ class MyTEDxApp extends StatelessWidget {
       providers: [
         Provider.value(value: localHistory),
         Provider.value(value: api),
+        Provider.value(value: authService),
+        ChangeNotifierProvider(
+          create: (_) => AuthViewModel(authService: authService)..bootstrap(),
+        ),
         ChangeNotifierProvider(
           create: (_) => TalkTagsCache(apiService: api),
         ),
@@ -78,7 +87,7 @@ class MyTEDxApp extends StatelessWidget {
         title: 'MyTEDx',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.dark,
-        home: const MainScreen(),
+        home: const AuthGate(),
       ),
     );
   }

@@ -6,13 +6,22 @@ import 'package:http/http.dart' as http;
 import '../models/talk.dart';
 import '../models/talk_details.dart';
 
+typedef AuthorizationTokenProvider = Future<String?> Function({
+  bool useAccessToken,
+});
+
 class ApiService {
-  ApiService({http.Client? client}) : _client = client ?? http.Client();
+  ApiService({
+    http.Client? client,
+    AuthorizationTokenProvider? authorizationTokenProvider,
+  })  : _client = client ?? http.Client(),
+        _authorizationTokenProvider = authorizationTokenProvider;
 
   static const String baseUrl =
       'https://bhux9o0old.execute-api.eu-north-1.amazonaws.com';
 
   final http.Client _client;
+  final AuthorizationTokenProvider? _authorizationTokenProvider;
 
   Future<List<Talk>> getFeed() async {
     // Live API exposes the feed at /feed (GET / returns 404).
@@ -63,9 +72,12 @@ class ApiService {
 
   Future<http.Response> _get(Uri uri) async {
     try {
-      final response = await _client.get(uri).timeout(
-            const Duration(seconds: 20),
-          );
+      var response = await _sendGet(uri, useAccessToken: false);
+
+      // Some gateways expect the access token instead of the ID token.
+      if (response.statusCode == 401 && _authorizationTokenProvider != null) {
+        response = await _sendGet(uri, useAccessToken: true);
+      }
 
       if (response.statusCode == 200) {
         return response;
@@ -84,6 +96,26 @@ class ApiService {
       if (error is Exception) rethrow;
       throw Exception('Unexpected error: $error');
     }
+  }
+
+  Future<http.Response> _sendGet(
+    Uri uri, {
+    required bool useAccessToken,
+  }) async {
+    final headers = <String, String>{
+      'Accept': 'application/json',
+    };
+
+    final token = await _authorizationTokenProvider?.call(
+      useAccessToken: useAccessToken,
+    );
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    return _client.get(uri, headers: headers).timeout(
+          const Duration(seconds: 20),
+        );
   }
 
   List<Talk> _parseTalkList(String body, {required String context}) {
@@ -106,6 +138,10 @@ class ApiService {
     switch (statusCode) {
       case 400:
         return 'Bad request.';
+      case 401:
+        return 'Unauthorized. Please sign in again.';
+      case 403:
+        return 'Access denied.';
       case 404:
         return 'Resource not found.';
       case 500:
